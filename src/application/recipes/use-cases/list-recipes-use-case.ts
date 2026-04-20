@@ -1,4 +1,4 @@
-import { fail, isFail, ok, type Result } from '@core/result/result';
+import { fail, ok, type Result } from '@core/result/result';
 import { ValidationFailure, type Failure } from '@core/failure';
 import type { IRecipeRepository } from '@domain/recipes/i-recipe-repository';
 import { RecipeMapper } from '@application/recipes/mappers/recipe.mapper';
@@ -31,14 +31,16 @@ export class ListRecipesUseCase {
       );
     }
 
+    const search = input.search?.trim();
+    const categoryId = input.categoryId?.trim();
     const result = await this.repo.list({
-      search: input.search?.trim() || undefined,
-      categoryId: input.categoryId?.trim() || undefined,
       page,
       pageSize,
+      ...(search ? { search } : {}),
+      ...(categoryId ? { categoryId } : {}),
     });
 
-    if (isFail(result)) return result;
+    if (!result.ok) return result;
     return ok(RecipeMapper.toPagedDto(result.value));
   }
 }
