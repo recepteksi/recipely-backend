@@ -1,3 +1,7 @@
+-- Required for User.email (case-insensitive uniqueness via @db.Citext).
+-- Idempotent so re-running against a DB that already has the extension is a no-op.
+CREATE EXTENSION IF NOT EXISTS citext;
+
 -- CreateEnum
 CREATE TYPE "Difficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD');
 
