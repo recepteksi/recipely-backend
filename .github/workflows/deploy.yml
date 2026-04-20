@@ -60,19 +60,33 @@ jobs:
             git reset --hard origin/main
 
             if [ ! -f .env ]; then
+<<<<<<< dev
               echo "ERROR: .env is missing!" >&2
+=======
+              echo "ERROR: $APP_DIR/.env is missing." >&2
+>>>>>>> main
               exit 1
             fi
 
             docker compose up -d --build --remove-orphans
             docker image prune -f
 
+<<<<<<< dev
             # Health Check (120 saniyeye çıkardım, 1GB RAM'de build uzun sürebilir)
             for i in $(seq 1 60); do
+=======
+            # Health Check
+            for i in $(seq 1 30); do
+>>>>>>> main
               if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
                 echo "Health check passed!"
                 exit 0
               fi
               sleep 2
             done
+<<<<<<< dev
+=======
+            echo "ERROR: /health did not respond in 60s" >&2
+            docker compose logs --tail=100 api >&2 || true
+>>>>>>> main
             exit 1
