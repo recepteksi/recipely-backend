@@ -1,0 +1,75 @@
+name: Deploy to Oracle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# WHY: never run two deploys at once — container rebuild is not transactional.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: http://${{ secrets.SSH_HOST }}:3000
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            APP_DIR="${HOME}/recipely-backend"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "First-time clone to $APP_DIR"
+              git clone --branch main --depth 1 \
+                "git@github.com:${{ github.repository }}.git" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            git fetch --prune origin main
+            git reset --hard origin/main
+
+            if [ ! -f .env ]; then
+              echo "ERROR: $APP_DIR/.env is missing. Create it once on the server before the first deploy." >&2
+              exit 1
+            fi
+
+            docker compose up -d --build --remove-orphans
+            docker image prune -f
+
+            # Wait for the api container to report healthy, fail the deploy if it doesn't.
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
+                echo "Health check passed after ${i}s"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "ERROR: /health did not respond in 60s" >&2
+            docker compose logs --tail=100 api >&2 || true
+            exit 1
