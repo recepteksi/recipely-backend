@@ -1,0 +1,101 @@
+# Recipely — production-ready compose for 1GB / 1 OCPU Oracle Cloud box.
+# Memory budget (host has 1GB RAM + 4GB swap):
+#   postgres:  512 MiB hard cap  (shared_buffers tuned down accordingly)
+#   api:       384 MiB hard cap  (NODE_OPTIONS --max-old-space-size=320)
+#   headroom:  ~128 MiB for OS / sshd / docker daemon
+# Never rely on swap for hot paths — it's a safety net, not a budget.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: recipely-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Hint postgres about the tight memory envelope.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=32MB"
+      - "-c"
+      - "max_connections=30"
+      - "-c"
+      - "wal_compression=on"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - recipely-net
+    # No public port — only exposed to the api container on the docker network.
+    expose:
+      - "5432"
+    mem_limit: 512m
+    mem_reservation: 256m
+    memswap_limit: 1g
+    cpus: "0.70"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: recipely-backend:latest
+    container_name: recipely-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+    # Apply schema on boot. For breaking changes do a staged `migrate dev` locally first.
+    command: sh -c "npx prisma migrate deploy && node dist/presentation/server/index.js"
+    networks:
+      - recipely-net
+    ports:
+      - "3000:3000"
+    mem_limit: 384m
+    mem_reservation: 192m
+    memswap_limit: 768m
+    cpus: "0.30"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+networks:
+  recipely-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

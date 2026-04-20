@@ -1,0 +1,96 @@
+// Recipely — Prisma schema
+// Keep this aligned with domain entities. Infra maps DB rows -> domain via mappers.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"] // Alpine runtime
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Users ----------
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique @db.Citext
+  passwordHash String     @map("password_hash")
+  displayName  String     @map("display_name")
+  photoUrl     String?    @map("photo_url")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  recipes   Recipe[]   @relation("RecipeOwner")
+  favorites Favorite[]
+
+  @@map("users")
+}
+
+// ---------- Categories ----------
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  recipes Recipe[]
+
+  @@map("categories")
+}
+
+// ---------- Recipes ----------
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Recipe {
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String
+  cuisine          String
+  difficulty       Difficulty @default(EASY)
+  ingredients      String[]
+  instructions     String[]
+  prepTimeMinutes  Int        @map("prep_time_minutes")
+  cookTimeMinutes  Int        @map("cook_time_minutes")
+  image            String
+  rating           Float      @default(0)
+  tags             String[]
+  mealType         String[]   @map("meal_type")
+  isPublished      Boolean    @default(true) @map("is_published")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  ownerId    String   @map("owner_id") @db.Uuid
+  owner      User     @relation("RecipeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  categoryId String?  @map("category_id") @db.Uuid
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  favorites  Favorite[]
+
+  // Query shape: list + search + category filter + pagination on createdAt
+  @@index([isPublished, categoryId, createdAt(sort: Desc)])
+  @@index([name])
+  @@map("recipes")
+}
+
+// ---------- Favorites ----------
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  recipeId  String   @map("recipe_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("favorites")
+}
