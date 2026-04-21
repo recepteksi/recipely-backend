@@ -19,9 +19,14 @@ export function createApp(container: Container): Express {
   app.use(express.json({ limit: '256kb' }));
   app.use(pinoHttp({ logger }));
 
+  // WHY: /health stays at root — Docker healthcheck + external LB probes target /health.
   app.use('/health', healthRoutes(container.controllers.health));
-  app.use('/auth', authRoutes(container.controllers.auth));
-  app.use('/recipes', recipesRoutes(container.controllers.recipes));
+
+  // WHY: product routes live under /api/v1 so we can introduce /api/v2 without breaking clients.
+  const v1 = express.Router();
+  v1.use('/auth', authRoutes(container.controllers.auth));
+  v1.use('/recipes', recipesRoutes(container.controllers.recipes));
+  app.use('/api/v1', v1);
 
   app.use((_req, res) => {
     res.status(404).json({ error: { code: 'not_found', message: 'Route not found' } });
