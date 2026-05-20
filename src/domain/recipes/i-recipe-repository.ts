@@ -17,4 +17,5 @@ export interface IRecipeRepository {
   update(recipe: Recipe): Promise<Result<Recipe, Failure>>;
   delete(id: string): Promise<Result<void, Failure>>;
   getPreferencesForUser(userId: string, limit?: number): Promise<Result<UserPreferences, Failure>>;
+  listWithoutNutrition(limit: number): Promise<Result<Recipe[], Failure>>;
 }
