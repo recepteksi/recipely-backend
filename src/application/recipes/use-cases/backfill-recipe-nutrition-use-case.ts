@@ -34,13 +34,19 @@ export class BackfillRecipeNutritionUseCase {
 
     let updated = 0;
     let failed = 0;
+    // Track every recipe ID we have already attempted (success or failure) so
+    // that a full batch of consistently-failing recipes does not cause an
+    // infinite loop: without exclusion, listWithoutNutrition would return the
+    // same records on every iteration since their nutrition column stays null.
+    const attemptedIds: string[] = [];
 
     for (;;) {
-      const batch = await this.recipeRepo.listWithoutNutrition(BATCH_SIZE);
+      const batch = await this.recipeRepo.listWithoutNutrition(BATCH_SIZE, attemptedIds);
       if (!batch.ok) return batch;
       if (batch.value.length === 0) break;
 
       for (const recipe of batch.value) {
+        attemptedIds.push(recipe.id);
         const raw = recipe.toRaw();
         const ingredients =
           raw.ingredients['en'] ??

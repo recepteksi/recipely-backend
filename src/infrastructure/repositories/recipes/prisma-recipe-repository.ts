@@ -268,10 +268,14 @@ export class PrismaRecipeRepository implements IRecipeRepository {
     }
   }
 
-  async listWithoutNutrition(limit: number): Promise<Result<Recipe[], Failure>> {
+  async listWithoutNutrition(limit: number, excludeIds?: readonly string[]): Promise<Result<Recipe[], Failure>> {
     try {
       const rows = await this.prisma.recipe.findMany({
-        where: { nutrition: { equals: Prisma.DbNull }, deletedAt: null },
+        where: {
+          nutrition: { equals: Prisma.DbNull },
+          deletedAt: null,
+          ...(excludeIds && excludeIds.length > 0 ? { id: { notIn: [...excludeIds] } } : {}),
+        },
         take: limit,
         orderBy: { createdAt: 'asc' },
         include: { media: { orderBy: { position: 'asc' } } },
