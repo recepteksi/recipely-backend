@@ -13,7 +13,7 @@ const upload = multer({
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files (jpeg, png, webp) are allowed'));
+      cb(new Error('Only image files (jpeg, png, gif, webp) are allowed'));
     }
   },
 });

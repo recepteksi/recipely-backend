@@ -12,10 +12,15 @@ export class LocalAvatarUploader implements IAvatarUploader {
   ) {}
 
   async upload(fileBuffer: Buffer, _mimetype: string, userId: string): Promise<string> {
+    if (!/^[\w-]{1,128}$/i.test(userId)) {
+      throw new Error('Invalid userId for avatar filename');
+    }
+
     const avatarsDir = path.join(this.uploadsDir, 'avatars');
     await mkdir(avatarsDir, { recursive: true });
 
-    const filename = `${userId}.webp`;
+    const safeUserId = path.basename(userId);
+    const filename = `${safeUserId}.webp`;
     const outputPath = path.join(avatarsDir, filename);
 
     await sharp(fileBuffer)
@@ -23,6 +28,6 @@ export class LocalAvatarUploader implements IAvatarUploader {
       .webp({ quality: 80 })
       .toFile(outputPath);
 
-    return `${this.baseUrl}/uploads/avatars/${filename}`;
+    return `${this.baseUrl}/uploads/avatars/${safeUserId}.webp`;
   }
 }
