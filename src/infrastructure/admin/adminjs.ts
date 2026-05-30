@@ -38,6 +38,8 @@ function buildComponentLoader(): ComponentLoader {
   // Nutrition object field.
   loader.add('NutritionInput', './components/nutrition-input');
   loader.add('NutritionShow', './components/nutrition-show');
+  // Title-Case rendering of enum values in list/show.
+  loader.add('EnumLabel', './components/enum-label');
   loader.add('ImageUpload', './components/image-upload');
   return loader;
 }
@@ -195,10 +197,22 @@ export async function createAdminJS(
       properties: {
         id: { isVisible: { list: false, show: true, edit: false, filter: false } },
         name: { components: { edit: 'KeyValueInput', show: 'KeyValueShow', list: 'KeyValueList' } },
-        cuisine: { availableValues: enumValues(CUISINE_KEY_VALUES) },
-        category: { availableValues: enumValues(RECIPE_CATEGORY_VALUES) },
-        difficulty: { availableValues: enumValues(Object.values(Difficulty)) },
-        moderationStatus: { availableValues: enumValues(Object.values(ModerationStatus)) },
+        cuisine: {
+          availableValues: enumValues(CUISINE_KEY_VALUES),
+          components: { list: 'EnumLabel', show: 'EnumLabel' },
+        },
+        category: {
+          availableValues: enumValues(RECIPE_CATEGORY_VALUES),
+          components: { list: 'EnumLabel', show: 'EnumLabel' },
+        },
+        difficulty: {
+          availableValues: enumValues(Object.values(Difficulty)),
+          components: { list: 'EnumLabel', show: 'EnumLabel' },
+        },
+        moderationStatus: {
+          availableValues: enumValues(Object.values(ModerationStatus)),
+          components: { list: 'EnumLabel', show: 'EnumLabel' },
+        },
         image: { components: { edit: 'ImageUpload' } },
         ingredients: { components: { edit: 'KeyValueArrayInput', show: 'KeyValueIngredientsShow' } },
         instructions: { components: { edit: 'KeyValueArrayInput', show: 'KeyValueInstructionsShow' } },
