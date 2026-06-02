@@ -1,5 +1,5 @@
 import { ok, fail } from '@core/result/result';
-import { UnknownFailure } from '@core/failure';
+import { NotFoundFailure, UnknownFailure } from '@core/failure';
 import { RecipeDraft } from '@domain/drafts/recipe-draft';
 import type { IRecipeDraftRepository } from '@domain/drafts/i-recipe-draft-repository';
 import { UpsertDraftUseCase, type UpsertDraftInput } from '@application/drafts/use-cases/upsert-draft-use-case';
@@ -34,8 +34,9 @@ function makeSavedDraft(input: UpsertDraftInput): RecipeDraft {
 
 function successRepo(savedDraft: RecipeDraft): IRecipeDraftRepository {
   return {
+    // getById returns not_found so UpsertDraftUseCase treats this as a new draft.
     async upsert() { return ok(savedDraft); },
-    async getById() { return fail(new UnknownFailure()); },
+    async getById() { return fail(new NotFoundFailure('errors.not_found.draft')); },
     async listByOwner() { return fail(new UnknownFailure()); },
     async getLatestByOwner() { return fail(new UnknownFailure()); },
     async delete() { return fail(new UnknownFailure()); },
@@ -45,7 +46,47 @@ function successRepo(savedDraft: RecipeDraft): IRecipeDraftRepository {
 function failingRepo(): IRecipeDraftRepository {
   return {
     async upsert() { return fail(new UnknownFailure('errors.db.write_failed')); },
-    async getById() { return fail(new UnknownFailure()); },
+    async getById() { return fail(new NotFoundFailure('errors.not_found.draft')); },
+    async listByOwner() { return fail(new UnknownFailure()); },
+    async getLatestByOwner() { return fail(new UnknownFailure()); },
+    async delete() { return fail(new UnknownFailure()); },
+  };
+}
+
+// Repo where getById returns an existing draft owned by a DIFFERENT user.
+function repoWithExistingDraft(existingOwner: string, draftId: string): {
+  repo: IRecipeDraftRepository;
+  upsertCalls: () => number;
+} {
+  const now = new Date();
+  const existing = RecipeDraft.create({
+    id: draftId,
+    ownerId: existingOwner,
+    prompt: 'original prompt',
+    snapshot: {},
+    chatHistory: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (!existing.ok) throw new Error('Test setup failed');
+  const existingDraft = existing.value;
+
+  let upsertCallCount = 0;
+  const repo: IRecipeDraftRepository = {
+    async upsert() { upsertCallCount++; return ok(existingDraft); },
+    async getById() { return ok(existingDraft); },
+    async listByOwner() { return fail(new UnknownFailure()); },
+    async getLatestByOwner() { return fail(new UnknownFailure()); },
+    async delete() { return fail(new UnknownFailure()); },
+  };
+  return { repo, upsertCalls: () => upsertCallCount };
+}
+
+// Repo where getById returns an unexpected non-not_found failure.
+function repoWithGetByIdFailure(): IRecipeDraftRepository {
+  return {
+    async upsert() { return fail(new UnknownFailure('should not be called')); },
+    async getById() { return fail(new UnknownFailure('errors.db.read_failed')); },
     async listByOwner() { return fail(new UnknownFailure()); },
     async getLatestByOwner() { return fail(new UnknownFailure()); },
     async delete() { return fail(new UnknownFailure()); },
@@ -130,5 +171,65 @@ describe('UpsertDraftUseCase — repo failure', () => {
     if (result.ok) return;
     expect(result.failure.code).toBe('unknown');
     expect(result.failure.messageKey).toBe('errors.db.write_failed');
+  });
+});
+
+describe('UpsertDraftUseCase — IDOR ownership check', () => {
+  it('returns ForbiddenFailure when the existing draft belongs to a different owner', async () => {
+    const DRAFT_ID = 'draft-1';
+    const REAL_OWNER = 'user-1';
+    const ATTACKER = 'user-2';
+    const { repo } = repoWithExistingDraft(REAL_OWNER, DRAFT_ID);
+
+    const input = makeInput({ id: DRAFT_ID, ownerId: ATTACKER });
+    const useCase = new UpsertDraftUseCase(repo);
+
+    const result = await useCase.execute(input);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.code).toBe('forbidden');
+  });
+
+  it('never calls repo.upsert when the ownership check fails', async () => {
+    const DRAFT_ID = 'draft-1';
+    const REAL_OWNER = 'user-1';
+    const ATTACKER = 'user-2';
+    const { repo, upsertCalls } = repoWithExistingDraft(REAL_OWNER, DRAFT_ID);
+
+    const input = makeInput({ id: DRAFT_ID, ownerId: ATTACKER });
+    const useCase = new UpsertDraftUseCase(repo);
+
+    await useCase.execute(input);
+
+    expect(upsertCalls()).toBe(0);
+  });
+
+  it('allows upsert when the caller is the owner of the existing draft', async () => {
+    const DRAFT_ID = 'draft-1';
+    const OWNER = 'user-1';
+    const { repo, upsertCalls } = repoWithExistingDraft(OWNER, DRAFT_ID);
+
+    const input = makeInput({ id: DRAFT_ID, ownerId: OWNER });
+    const useCase = new UpsertDraftUseCase(repo);
+
+    const result = await useCase.execute(input);
+
+    expect(result.ok).toBe(true);
+    expect(upsertCalls()).toBe(1);
+  });
+});
+
+describe('UpsertDraftUseCase — getById non-not_found failure propagation', () => {
+  it('propagates an unexpected getById failure without calling upsert', async () => {
+    const input = makeInput();
+    const useCase = new UpsertDraftUseCase(repoWithGetByIdFailure());
+
+    const result = await useCase.execute(input);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.code).toBe('unknown');
+    expect(result.failure.messageKey).toBe('errors.db.read_failed');
   });
 });

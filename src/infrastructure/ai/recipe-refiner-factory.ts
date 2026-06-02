@@ -35,5 +35,9 @@ export function createRecipeRefiner(input: AIGeneratorFactoryInput): IRecipeRefi
       }
       return new GroqRecipeRefiner({ apiKey: input.groqApiKey, model: input.model });
     }
+    default: {
+      logger.warn({ provider: input.provider }, 'Unknown AI provider — /refine disabled');
+      return new DisabledRecipeRefiner();
+    }
   }
 }
