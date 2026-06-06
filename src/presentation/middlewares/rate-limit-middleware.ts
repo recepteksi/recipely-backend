@@ -2,7 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { TooManyRequestsFailure } from '@core/failure';
 
 export interface RateLimitOptions {
-  /** Sliding fixed window length in milliseconds. */
+  /** Fixed window length in milliseconds. */
   readonly windowMs: number;
   /** Max requests allowed per key within the window. */
   readonly max: number;
@@ -20,9 +20,16 @@ interface WindowEntry {
  * back to client IP). On the constrained single-instance host this needs no
  * external store; the map is swept lazily so it never grows unbounded.
  *
+ * Fixed window (not sliding): a key resets only once its window fully elapses,
+ * so a burst straddling a boundary can reach up to ~2×`max` — acceptable for a
+ * cost/abuse cap, not a precise quota.
+ *
  * On exceed it forwards a {@link TooManyRequestsFailure} to the error handler
  * (→ HTTP 429 `too_many_requests`) and sets `Retry-After`. Mount AFTER the auth
  * middleware so `req.user` is populated and the limit is per-user, not global.
+ * The IP fallback only matters on unauthenticated routes; it assumes
+ * `trust proxy` is configured before reuse there, or all clients behind a proxy
+ * collapse onto one key.
  */
 export function createRateLimitMiddleware(options: RateLimitOptions): RequestHandler {
   const windows = new Map<string, WindowEntry>();

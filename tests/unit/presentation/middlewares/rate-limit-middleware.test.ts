@@ -37,7 +37,10 @@ describe('createRateLimitMiddleware', () => {
     expect(blocked).toBeInstanceOf(TooManyRequestsFailure);
     expect(blocked.code).toBe('too_many_requests');
     expect(blocked.messageKey).toBe(opts.messageKey);
-    expect(setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    const retryAfter = Number(setHeader.mock.calls[0]?.[1]);
+    expect(Number.isInteger(retryAfter)).toBe(true);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
   it('tracks each user independently', () => {
