@@ -255,6 +255,8 @@ export async function createAdminJS(
     },
   };
 
+  // Intentionally fully editable: a recipe's media gallery is content the admin
+  // curates directly (no derived counters depend on these rows).
   const recipeMediaResource = {
     resource: { model: getModelByName('RecipeMedia'), client: prisma },
     options: {
@@ -282,6 +284,14 @@ export async function createAdminJS(
           availableValues: enumValues(Object.values(ModerationStatus)),
           components: { list: 'EnumLabel', show: 'EnumLabel' },
         },
+      },
+      actions: {
+        // Edit stays enabled so admins can change moderationStatus, but creating
+        // or deleting comment rows directly would desync Recipe.commentCount,
+        // which is maintained transactionally only by the comment use cases.
+        new: { isAccessible: false },
+        delete: { isAccessible: false },
+        bulkDelete: { isAccessible: false },
       },
     },
   };
@@ -340,22 +350,32 @@ export async function createAdminJS(
     },
   };
 
-  // Sensitive secret material (token/code hashes). Inspectable for debugging
-  // expiry/usage, never editable.
+  // `token` is the live reset credential (raw random bytes, not a hash) — an
+  // admin who could read it could take over any account inside the 1h window.
+  // Hidden everywhere; expiry/usage is inspectable via the other columns.
   const passwordResetTokenResource = {
     resource: { model: getModelByName('PasswordResetToken'), client: prisma },
     options: {
       navigation: { name: 'System', icon: 'Key' },
       sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      properties: {
+        token: { isVisible: false },
+      },
       actions: { ...readOnlyActions },
     },
   };
 
+  // passwordHash/codeHash are bcrypt digests, not usable credentials, but hiding
+  // them follows least-privilege and matches how User.passwordHash is handled.
   const pendingRegistrationResource = {
     resource: { model: getModelByName('PendingRegistration'), client: prisma },
     options: {
       navigation: { name: 'System', icon: 'UserPlus' },
       sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      properties: {
+        passwordHash: { isVisible: false },
+        codeHash: { isVisible: false },
+      },
       actions: { ...readOnlyActions },
     },
   };
