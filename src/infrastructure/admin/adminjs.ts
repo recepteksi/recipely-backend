@@ -248,11 +248,14 @@ export async function createAdminJS(
     edit: { isAccessible: false },
   };
 
-  // Recipe FK columns must use a custom cell — the default reference renderer
-  // prints the recipe title, which is localized `name` JSON (an object) and
-  // throws React error #31. `key` is the FK property name on the owning model.
-  const recipeRefProperty = (key: string) => ({
-    [key]: { components: { list: 'RecipeRefCell', show: 'RecipeRefCell' } },
+  // The Recipe reference column must use a custom cell — the default reference
+  // renderer prints the recipe title, which is localized `name` JSON (an object)
+  // and throws React error #31. @adminjs/prisma exposes the *relation* field
+  // (`recipe`) as the reference property (its value is the FK uuid); the scalar
+  // FK column (`recipeId`/`generatedRecipeId`) is a redundant uuid we hide.
+  const recipeRefProperty = (scalarFk: string) => ({
+    recipe: { components: { list: 'RecipeRefCell', show: 'RecipeRefCell' } },
+    [scalarFk]: { isVisible: false },
   });
 
   const favoriteResource = {
