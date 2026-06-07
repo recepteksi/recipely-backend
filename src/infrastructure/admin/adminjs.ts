@@ -238,14 +238,125 @@ export async function createAdminJS(
     },
   };
 
+  // Read-only resources: join tables, audit logs, and ephemeral records that the
+  // admin should be able to inspect but not hand-edit (id/created_at are managed
+  // by the app, and mutating these by hand would desync derived counters/state).
+  const readOnlyActions = {
+    new: { isAccessible: false },
+    edit: { isAccessible: false },
+  };
+
   const favoriteResource = {
     resource: { model: getModelByName('Favorite'), client: prisma },
     options: {
       navigation: { name: 'Content', icon: 'Heart' },
-      actions: {
-        new: { isAccessible: false },
-        edit: { isAccessible: false },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const recipeMediaResource = {
+    resource: { model: getModelByName('RecipeMedia'), client: prisma },
+    options: {
+      navigation: { name: 'Content', icon: 'Image' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+    },
+  };
+
+  const recipeLikeResource = {
+    resource: { model: getModelByName('RecipeLike'), client: prisma },
+    options: {
+      navigation: { name: 'Social', icon: 'ThumbsUp' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const commentResource = {
+    resource: { model: getModelByName('Comment'), client: prisma },
+    options: {
+      navigation: { name: 'Social', icon: 'MessageSquare' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      properties: {
+        moderationStatus: {
+          availableValues: enumValues(Object.values(ModerationStatus)),
+          components: { list: 'EnumLabel', show: 'EnumLabel' },
+        },
       },
+    },
+  };
+
+  const commentLikeResource = {
+    resource: { model: getModelByName('CommentLike'), client: prisma },
+    options: {
+      navigation: { name: 'Social', icon: 'ThumbsUp' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const userFollowResource = {
+    resource: { model: getModelByName('UserFollow'), client: prisma },
+    options: {
+      navigation: { name: 'Social', icon: 'Users' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const notificationResource = {
+    resource: { model: getModelByName('Notification'), client: prisma },
+    options: {
+      navigation: { name: 'Social', icon: 'Bell' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const recipeDraftResource = {
+    resource: { model: getModelByName('RecipeDraft'), client: prisma },
+    options: {
+      navigation: { name: 'Content', icon: 'Edit' },
+      sort: { sortBy: 'updatedAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const aiGenerationLogResource = {
+    resource: { model: getModelByName('AIGenerationLog'), client: prisma },
+    options: {
+      navigation: { name: 'System', icon: 'Cpu' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const fcmTokenResource = {
+    resource: { model: getModelByName('FcmToken'), client: prisma },
+    options: {
+      navigation: { name: 'System', icon: 'Smartphone' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  // Sensitive secret material (token/code hashes). Inspectable for debugging
+  // expiry/usage, never editable.
+  const passwordResetTokenResource = {
+    resource: { model: getModelByName('PasswordResetToken'), client: prisma },
+    options: {
+      navigation: { name: 'System', icon: 'Key' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
+    },
+  };
+
+  const pendingRegistrationResource = {
+    resource: { model: getModelByName('PendingRegistration'), client: prisma },
+    options: {
+      navigation: { name: 'System', icon: 'UserPlus' },
+      sort: { sortBy: 'createdAt', direction: 'desc' as const },
+      actions: { ...readOnlyActions },
     },
   };
 
@@ -266,7 +377,18 @@ export async function createAdminJS(
     resources: [
       userResource,
       recipeResource,
+      recipeMediaResource,
+      recipeDraftResource,
       favoriteResource,
+      recipeLikeResource,
+      commentResource,
+      commentLikeResource,
+      userFollowResource,
+      notificationResource,
+      aiGenerationLogResource,
+      fcmTokenResource,
+      passwordResetTokenResource,
+      pendingRegistrationResource,
       featureFlagResource,
     ],
     branding: {
