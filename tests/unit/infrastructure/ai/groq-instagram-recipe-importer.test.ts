@@ -267,8 +267,8 @@ describe('GroqInstagramRecipeImporter — yt-dlp probe failures', () => {
 describe('GroqInstagramRecipeImporter — vision call failures', () => {
   it('returns UnprocessableFailure no_recipe_found when isRecipe is false (full valid schema)', async () => {
     setupHappyPathMocks();
-    // The schema validates all recipe fields first; isRecipe:false is only checked after
-    // schema validation passes. Provide a complete valid recipe with isRecipe:false.
+    // isRecipe:false is now checked BEFORE schema validation, so a full recipe
+    // payload with the flag also short-circuits to no_recipe_found.
     const notARecipeJson = JSON.stringify({
       isRecipe: false,
       title: 'Not a recipe',
@@ -287,6 +287,24 @@ describe('GroqInstagramRecipeImporter — vision call failures', () => {
     });
     mockChatCreate.mockResolvedValueOnce({
       choices: [{ message: { content: notARecipeJson } }],
+    });
+
+    const importer = makeImporter();
+    const result = await importer.import(VALID_REQUEST);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.code).toBe('unprocessable');
+    expect(result.failure.messageKey).toBe('errors.import.no_recipe_found');
+  });
+
+  it('returns UnprocessableFailure no_recipe_found for a BARE {"isRecipe":false} response', async () => {
+    setupHappyPathMocks();
+    // The prompt instructs the model to respond with ONLY {"isRecipe": false}
+    // for non-recipe content. This bare object fails the full recipe schema,
+    // so the no-recipe check must happen before schema validation.
+    mockChatCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ isRecipe: false }) } }],
     });
 
     const importer = makeImporter();

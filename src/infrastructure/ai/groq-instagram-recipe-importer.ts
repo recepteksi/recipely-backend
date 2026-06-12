@@ -322,14 +322,19 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
       return fail(new UnprocessableFailure('errors.ai.invalid_response', 'response'));
     }
 
+    // Check the no-recipe signal BEFORE full schema validation. The prompt
+    // instructs the model to respond with bare {"isRecipe": false} for
+    // non-recipe content — that minimal object fails the full recipe schema,
+    // so we must short-circuit here to surface the correct error code.
+    const isRecipeFlag = (parsedJson as Record<string, unknown>)['isRecipe'];
+    if (isRecipeFlag === false) {
+      return fail(new UnprocessableFailure('errors.import.no_recipe_found'));
+    }
+
     const validated = ImportRecipeVisionSchema.safeParse(parsedJson);
     if (!validated.success) {
       logger.error({ issues: validated.error.issues }, 'instagram_import_vision_schema_mismatch');
       return fail(new UnprocessableFailure('errors.ai.invalid_response', 'response'));
-    }
-
-    if (!validated.data.isRecipe) {
-      return fail(new UnprocessableFailure('errors.import.no_recipe_found'));
     }
 
     return ok({
