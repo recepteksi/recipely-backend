@@ -348,7 +348,7 @@ describe('GroqInstagramRecipeImporter — vision call failures', () => {
     expect(result.failure.messageKey).toBe('errors.ai.invalid_response');
   });
 
-  it('returns UnknownFailure when the Groq vision client throws', async () => {
+  it('returns ServiceUnavailableFailure when the Groq vision client throws', async () => {
     setupHappyPathMocks();
     mockChatCreate.mockRejectedValueOnce(new Error('upstream error'));
 
@@ -357,8 +357,35 @@ describe('GroqInstagramRecipeImporter — vision call failures', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.failure.code).toBe('unknown');
+    expect(result.failure.code).toBe('service_unavailable');
     expect(result.failure.messageKey).toBe('errors.ai.upstream_failed');
+  });
+});
+
+// ---- mkdtemp failure ---------------------------------------------------------
+
+describe('GroqInstagramRecipeImporter — temp dir creation failure', () => {
+  it('returns a failure and does not stay stuck busy when mkdtemp throws', async () => {
+    mockMkdtemp.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+
+    const importer = makeImporter();
+    const first = await importer.import(VALID_REQUEST);
+
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    expect(first.failure.messageKey).toBe('errors.import.fetch_failed');
+
+    // The busy guard must have been released — a follow-up import proceeds
+    // past the guard (here it fails at the probe step, NOT with busy).
+    mockMkdtemp.mockResolvedValueOnce('/tmp/igimport-test');
+    mockRm.mockResolvedValue(undefined);
+    mockExecFile.mockRejectedValueOnce(new Error('yt-dlp: exit code 1'));
+
+    const second = await importer.import(VALID_REQUEST);
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.failure.messageKey).toBe('errors.import.fetch_failed');
+    expect(second.failure.messageKey).not.toBe('errors.import.busy');
   });
 });
 

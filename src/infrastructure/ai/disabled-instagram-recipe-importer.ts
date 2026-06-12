@@ -1,5 +1,5 @@
 import { fail, type Result } from '@core/result/result';
-import { UnknownFailure, type Failure } from '@core/failure';
+import { ServiceUnavailableFailure, type Failure } from '@core/failure';
 import type {
   IInstagramRecipeImporter,
   ImportInstagramRecipeRequest,
@@ -13,6 +13,6 @@ export class DisabledInstagramRecipeImporter implements IInstagramRecipeImporter
   async import(
     _req: ImportInstagramRecipeRequest,
   ): Promise<Result<ImportInstagramRecipeResult, Failure>> {
-    return fail(new UnknownFailure('errors.ai.provider_not_configured'));
+    return fail(new ServiceUnavailableFailure('errors.ai.provider_not_configured'));
   }
 }

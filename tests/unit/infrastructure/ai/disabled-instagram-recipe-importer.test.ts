@@ -15,14 +15,14 @@ describe('DisabledInstagramRecipeImporter', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('returns UnknownFailure with provider_not_configured messageKey', async () => {
+  it('returns ServiceUnavailableFailure with provider_not_configured messageKey', async () => {
     const importer = new DisabledInstagramRecipeImporter();
 
     const result = await importer.import(TEST_REQUEST);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.failure.code).toBe('unknown');
+    expect(result.failure.code).toBe('service_unavailable');
     expect(result.failure.messageKey).toBe('errors.ai.provider_not_configured');
   });
 

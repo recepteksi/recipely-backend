@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fail, ok, type Result } from '@core/result/result';
-import { UnknownFailure, UnprocessableFailure, ValidationFailure, type Failure } from '@core/failure';
+import { ServiceUnavailableFailure, UnknownFailure, UnprocessableFailure, ValidationFailure, type Failure } from '@core/failure';
 import type {
   IInstagramRecipeImporter,
   ImportInstagramRecipeRequest,
@@ -47,13 +47,22 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
     }
     this.busy = true;
 
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'igimport-'));
-
     try {
-      return await this.runPipeline(req, tmpDir);
+      let tmpDir: string;
+      try {
+        tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'igimport-'));
+      } catch (err) {
+        logger.error({ err }, 'instagram_import_tmpdir_create_failed');
+        return fail(new UnknownFailure('errors.import.fetch_failed'));
+      }
+
+      try {
+        return await this.runPipeline(req, tmpDir);
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
     } finally {
       this.busy = false;
-      await fs.rm(tmpDir, { recursive: true, force: true });
     }
   }
 
@@ -114,7 +123,7 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
     try {
       const result = await execFile(
         'yt-dlp',
-        ['--no-playlist', '--dump-json', '--socket-timeout', '30', url],
+        ['--no-playlist', '--dump-json', '--socket-timeout', '30', '--', url],
         { maxBuffer: MAX_BUFFER_BYTES },
       );
       stdout = result.stdout;
@@ -147,7 +156,7 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
     try {
       await execFile(
         'yt-dlp',
-        ['--no-playlist', '-f', 'worstvideo+bestaudio/worst', '-o', outTemplate, '--socket-timeout', '30', url],
+        ['--no-playlist', '-f', 'worstvideo+bestaudio/worst', '-o', outTemplate, '--socket-timeout', '30', '--', url],
         { maxBuffer: MAX_BUFFER_BYTES },
       );
     } catch (err) {
@@ -196,7 +205,7 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
       buffer = await fs.readFile(audioPath);
     } catch (err) {
       logger.error({ err }, 'instagram_import_audio_read_failed');
-      return fail(new UnknownFailure('errors.ai.upstream_failed'));
+      return fail(new ServiceUnavailableFailure('errors.ai.upstream_failed'));
     }
 
     try {
@@ -212,7 +221,7 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
         { err, errMessage: err instanceof Error ? err.message : String(err) },
         'instagram_import_transcription_upstream_failed',
       );
-      return fail(new UnknownFailure('errors.ai.upstream_failed'));
+      return fail(new ServiceUnavailableFailure('errors.ai.upstream_failed'));
     }
   }
 
@@ -311,7 +320,7 @@ export class GroqInstagramRecipeImporter implements IInstagramRecipeImporter {
         },
         'instagram_import_vision_request_failed',
       );
-      return fail(new UnknownFailure('errors.ai.upstream_failed'));
+      return fail(new ServiceUnavailableFailure('errors.ai.upstream_failed'));
     }
 
     let parsedJson: unknown;
